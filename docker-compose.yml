@@ -1,0 +1,51 @@
+version: '3.6'
+
+services:
+  bitcoin:
+    extends:
+      file: docker-compose.base.yml
+      service: base
+    build:
+      context: .
+      dockerfile: Dockerfile.bitcoin
+      args:
+        RELEASE_TAG: 0.21.0
+    container_name: bitcoin
+    image: bitcoin:v0.21.0
+    environment:
+      - NODE_DATA
+      - NODE_CONFIG
+      - USER_ID
+    command: bash -c "bitcoind -conf=/node-config/bitcoin.conf -datadir=/node-data"
+    volumes: 
+      - $NODE_DATA:/node-data
+      - $NODE_CONFIG:/node-config
+    expose:
+      - 8030
+      - 38330
+  
+  blockbook:
+    extends:
+      file: docker-compose.base.yml
+      service: base
+    build:
+      context: .
+      dockerfile: Dockerfile.blockbook
+      args:
+        RELEASE_TAG: v0.3.4
+        COIN: bitcoin
+    depends_on:
+      - bitcoin
+    container_name: blockbook
+    image: blockbook:v0.3.4
+    environment:
+      - USER_ID
+      - BLOCKBOOK_DATA
+    command: bash -c "./blockbook -sync -blockchaincfg=build/blockchaincfg.json -datadir=/blockbook-data -certfile=server/testcert -internal=:9030 -public=0.0.0.0:9130 -logtostderr -debug"
+    volumes: 
+      - $BLOCKBOOK_DATA:/blockchain-data
+    ports:
+      - 9130:9130
+
+# volumes:
+#   blockchain-data:

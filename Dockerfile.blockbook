@@ -1,0 +1,145 @@
+FROM ubuntu:20.04 AS builder
+
+# Install dependencies
+RUN echo "Installing dependencies"; \
+  set -eux; \
+  # Add a dns and ubuntu source repo for Korea to make updates faster
+  echo nameserver 8.8.8.8 >> /etc/resolv.conf; \
+  echo 'Acquire::By-Hash "yes";' >> /etc/apt/apt.conf; \
+  echo 'Acquire::CompressionTypes::Order:: "gz";' >> /etc/apt/apt.conf; \
+  sed -i 's/archive.ubuntu.com/ftp.daum.net/g' /etc/apt/sources.list; \
+  savedAptMark="$(apt-mark showmanual)"; \
+	apt-get update; \
+	apt-get install -y --no-install-recommends \
+      autoconf \
+      automake \
+      build-essential \
+      ca-certificates \
+      curl \
+      git \
+      gnupg \
+      wget \
+      pkg-config \
+      libtool \
+      lxc-dev \
+      libzmq3-dev \
+      libgflags-dev \
+      libsnappy-dev \
+      zlib1g-dev \
+      libbz2-dev \
+      liblz4-dev \
+      graphviz; \
+  rm -rf /var/lib/apt/lists/*; \
+  apt-get clean; \
+  apt-mark auto '.*' > /dev/null; \
+  [ -z "$savedAptMark" ] || apt-mark manual $savedAptMark > /dev/null
+
+# Install Gosu
+ENV GOSU_VERSION=1.12
+RUN echo "Installing gosu $GOSU_VERSION" \
+  && set -ux \
+	&& dpkgArch="$(dpkg --print-architecture | awk -F- '{ print $NF }')" \
+	&& wget -O /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-$dpkgArch" \
+	&& wget -O /usr/local/bin/gosu.asc "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-$dpkgArch.asc" \
+  && export GNUPGHOME="$(mktemp -d)" \
+	&& gpg --batch --keyserver hkps://keys.openpgp.org --recv-keys B42F6819007F00F88E364FD4036A9C25BF357DD4 \
+	&& gpg --batch --verify /usr/local/bin/gosu.asc /usr/local/bin/gosu \
+	&& gpgconf --kill all \
+	&& rm -rf "$GNUPGHOME" /usr/local/bin/gosu.asc \
+	&& chmod +x /usr/local/bin/gosu \
+	&& gosu --version \
+	&& gosu nobody true
+
+# Install Go
+ENV GO_VERSION=1.15.6
+ENV PATH=$PATH:/usr/local/go/bin
+RUN echo "Installing Go" \
+  && wget https://golang.org/dl/go$GO_VERSION.linux-amd64.tar.gz \
+  && tar -C /usr/local -xzf go$GO_VERSION.linux-amd64.tar.gz \
+  && go version \
+  && rm go$GO_VERSION.linux-amd64.tar.gz
+
+# Install ZeroMQ
+RUN echo "Installing ZeroMQ" \
+  && git clone https://github.com/zeromq/libzmq \
+  && cd libzmq \
+  && ./autogen.sh \
+  && ./configure \
+  && make \
+  && make install \
+  && cd .. && rm -rf libzmq
+
+# Install RocksDB
+ENV ROCKSDB_VERSION=v6.13.3
+RUN echo "Installing RocksDB" \
+  && cd /opt \
+  && git clone https://github.com/facebook/rocksdb.git \
+  && cd rocksdb \
+  && git checkout $ROCKSDB_VERSION \
+  && CFLAGS=-fPIC CXXFLAGS=-fPIC make release
+ENV CGO_CFLAGS="-I/opt/rocksdb/include"
+ENV CGO_LDFLAGS="-L/opt/rocksdb -lrocksdb -ldl -lstdc++ -lm -lz -lbz2 -lsnappy -llz4"
+
+# Build Blockbook
+ENV GOPATH=/go
+ARG RELEASE_TAG=v0.3.4
+ARG COIN=bitcoin
+RUN echo "Building Blockbook" \
+  && set -ux \
+  && mkdir -p $GOPATH/src && cd $GOPATH/src \
+  && git clone https://github.com/trezor/blockbook.git \
+  && cd blockbook \
+  && git checkout tags/$RELEASE_TAG \
+  && go mod download \
+  && sed -i 's/maxRequestContentLength\ =\ 1024\ \*\ 1024\ \*\ 5/maxRequestContentLength = 1024 * 1024 * 20/g' $GOPATH/pkg/mod/github.com/ethereum/go-ethereum*/rpc/http.go \
+  && BUILDTIME=$(date --iso-8601=seconds) \
+  && GITCOMMIT=$(git describe --always --dirty) \
+  && LDFLAGS="-X blockbook/common.version=${RELEASE_TAG} -X blockbook/common.gitcommit=${GITCOMMIT} -X blockbook/common.buildtime=${BUILDTIME}" \
+  && go build -ldflags="-s -w ${LDFLAGS}" \
+  && ./contrib/scripts/build-blockchaincfg.sh $COIN \
+  && sed -i 's/127\.0\.0\.1/'"$COIN"'/g' ./build/blockchaincfg.json
+
+
+FROM ubuntu:20.04
+
+ENV APP_DATA_DIR=/blockbook-data
+ENV BLOCKBOOK_DIR=/go/src/blockbook
+
+# add user and group first to make sure their IDs 
+# get assigned consistently and create missing directories
+ENV USER_ID=1000
+ENV USER_NAME=docker_user
+RUN groupadd -r -g $USER_ID $USER_NAME \
+  && useradd -r -g $USER_NAME -u $USER_ID -d $APP_DATA_DIR -s /bin/bash -M $USER_NAME \
+  && mkdir -p $APP_DATA_DIR $BLOCKBOOK_DIR \
+  && mkdir -p /go/src/blockbook/build/text
+
+# Install dependencies
+RUN echo "Installing dependencies"; \
+  set -eux; \
+	apt-get update; \
+	apt-get install -y --no-install-recommends \
+    curl \
+    net-tools \
+    lxc-dev \
+    libzmq3-dev \
+    libgflags-dev \
+    libsnappy-dev \
+    zlib1g-dev \
+    libbz2-dev \
+    liblz4-dev \
+    graphviz; \
+  rm -rf /var/lib/apt/lists/*; \
+  apt-get clean;
+
+COPY --from=builder /usr/local/bin/gosu /usr/local/bin/
+COPY --from=builder /go/src/blockbook/ $BLOCKBOOK_DIR/
+COPY entrypoint.sh /usr/local/bin/
+
+# Adjust the ownerships/mod of application related directories
+RUN chown -R $USER_NAME:$USER_NAME $APP_DATA_DIR /go \
+  && chmod -R 755 /usr/local/bin/entrypoint.sh
+
+WORKDIR $BLOCKBOOK_DIR
+VOLUME $APP_DATA_DIR
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

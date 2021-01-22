@@ -1,0 +1,13 @@
+version: '3.6'
+
+services:
+  base:
+    restart: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        compress: "true"
+        max-file: "10"
+        max-size: "50m"
+    stop_signal: SIGINT
+    stop_grace_period: 30s
