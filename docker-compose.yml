@@ -34,16 +34,14 @@ services:
       args:
         RELEASE_TAG: v0.3.4
         COIN: bitcoin
-    depends_on:
-      - bitcoin
     container_name: blockbook
     image: blockbook:v0.3.4
     environment:
       - USER_ID
       - BLOCKBOOK_DATA
-    command: bash -c "./blockbook -sync -blockchaincfg=build/blockchaincfg.json -datadir=/blockbook-data -certfile=server/testcert -internal=:9030 -public=0.0.0.0:9130 -logtostderr -debug"
+    command: bash -c "./blockbook -sync -blockchaincfg=build/blockchaincfg.json -datadir=/blockbook-data -certfile=server/testcert -workers=2 -dbcache=0 -internal=:9030 -public=0.0.0.0:9130 -logtostderr -debug"
     volumes: 
-      - $BLOCKBOOK_DATA:/blockchain-data
+      - $BLOCKBOOK_DATA:/blockbook-data
     ports:
       - 9130:9130
 

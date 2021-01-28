@@ -10,4 +10,4 @@ services:
         max-file: "10"
         max-size: "50m"
     stop_signal: SIGINT
-    stop_grace_period: 30s
+    stop_grace_period: 5m
