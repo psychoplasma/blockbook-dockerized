@@ -94,7 +94,7 @@ RUN echo "Building Blockbook" \
   && sed -i 's/maxRequestContentLength\ =\ 1024\ \*\ 1024\ \*\ 5/maxRequestContentLength = 1024 * 1024 * 20/g' $GOPATH/pkg/mod/github.com/ethereum/go-ethereum*/rpc/http.go \
   && BUILDTIME=$(date --iso-8601=seconds) \
   && GITCOMMIT=$(git describe --always --dirty) \
-  && LDFLAGS="-X blockbook/common.version=${RELEASE_TAG} -X blockbook/common.gitcommit=${GITCOMMIT} -X blockbook/common.buildtime=${BUILDTIME}" \
+  && LDFLAGS="-X github.com/trezor/blockbook/common.version=${RELEASE_TAG} -X github.com/trezor/blockbook/common.gitcommit=${GITCOMMIT} -X github.com/trezor/blockbook/common.buildtime=${BUILDTIME}" \
   && go build -ldflags="-s -w ${LDFLAGS}" \
   && ./contrib/scripts/build-blockchaincfg.sh $COIN \
   && sed -i 's/127\.0\.0\.1/'"$COIN"'/g' ./build/blockchaincfg.json
@@ -114,13 +114,11 @@ RUN groupadd -r -g $USER_ID $USER_NAME \
   && mkdir -p $APP_DATA_DIR $BLOCKBOOK_DIR \
   && mkdir -p /go/src/blockbook/build/text
 
-# Install dependencies
-RUN echo "Installing dependencies"; \
+# Install runtime dependencies
+RUN echo "Installing runtime dependencies"; \
   set -eux; \
 	apt-get update; \
 	apt-get install -y --no-install-recommends \
-    curl \
-    net-tools \
     lxc-dev \
     libzmq3-dev \
     libgflags-dev \
