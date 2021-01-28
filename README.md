@@ -31,4 +31,4 @@ $ docker-compose logs bitcoin
 
 ## Todos
 
-* [] Add build variables to blockbook service in order to set bitcoind's RPC credentials to anything other than the defualt
+- [] Add build variables to blockbook service in order to set bitcoind's RPC credentials to anything other than the defualt
