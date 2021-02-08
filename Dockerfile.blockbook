@@ -60,9 +60,11 @@ RUN echo "Installing Go" \
   && rm go$GO_VERSION.linux-amd64.tar.gz
 
 # Install ZeroMQ
+ENV ZEROMQ_VERSION=v4.3.2
 RUN echo "Installing ZeroMQ" \
   && git clone https://github.com/zeromq/libzmq \
   && cd libzmq \
+  && git checkout tags/$ZEROMQ_VERSION \
   && ./autogen.sh \
   && ./configure \
   && make \
