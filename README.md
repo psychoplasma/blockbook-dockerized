@@ -32,3 +32,4 @@ $ docker-compose logs bitcoin
 ## Todos
 
 - [ ] Add build variables to blockbook service in order to set bitcoind's RPC credentials to anything other than the defualt
+- [ ] Move out blockchainconf file off the builder of blockbook. Instead use volume binding to configuration file
